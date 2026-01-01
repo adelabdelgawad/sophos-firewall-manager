@@ -54,16 +54,19 @@ class OperationResultFormatter:
         
         if result.status == OperationStatus.SUCCESS:
             return f"{ColorFormatter.SUCCESS} {record_value}: {message}"
-        
+
+        if result.status == OperationStatus.UPDATED:
+            return f"{ColorFormatter.SUCCESS} {record_value}: {message}"
+
         if result.status == OperationStatus.ALREADY_EXISTS:
             return f"{ColorFormatter.WARNING} {record_value}: {message}"
-        
+
         if result.status == OperationStatus.SKIPPED:
             return f"{ColorFormatter.WARNING} {record_value}: Skipped (invalid format)"
-        
+
         if result.status == OperationStatus.FAILED:
             return f"{ColorFormatter.ERROR} {record_value}: {message}"
-        
+
         return f"{ColorFormatter.INFO} {record_value}: Unknown status"
 
 
@@ -87,6 +90,7 @@ class SummaryFormatter:
             "=" * 60,
             f"Total records: {summary.total}",
             f"{ColorFormatter.SUCCESS} Created: {summary.successful}",
+            f"{ColorFormatter.SUCCESS} Updated: {summary.updated}",
             f"{ColorFormatter.WARNING} Already existed: {summary.already_exists}",
             f"{ColorFormatter.ERROR} Failed: {summary.failed}",
             f"{ColorFormatter.WARNING} Skipped: {summary.skipped}",

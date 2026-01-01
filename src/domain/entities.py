@@ -16,9 +16,10 @@ class RecordType(Enum):
 
 class OperationStatus(Enum):
     """Status of firewall operations."""
-    
+
     SUCCESS = "success"
     ALREADY_EXISTS = "already_exists"
+    UPDATED = "updated"
     FAILED = "failed"
     SKIPPED = "skipped"
 
@@ -97,32 +98,36 @@ class OperationResult:
 class ProcessingSummary:
     """
     Summary of batch record processing.
-    
+
     Tracks statistics for the entire processing operation.
     """
-    
+
     total: int = 0
     successful: int = 0
+    updated: int = 0
     already_exists: int = 0
     failed: int = 0
     skipped: int = 0
-    
+
     def record_result(self, result: OperationResult) -> None:
         """Update summary with an operation result."""
         self.total += 1
-        
+
         if result.status == OperationStatus.SUCCESS:
             self.successful += 1
+        elif result.status == OperationStatus.UPDATED:
+            self.updated += 1
         elif result.status == OperationStatus.ALREADY_EXISTS:
             self.already_exists += 1
         elif result.status == OperationStatus.FAILED:
             self.failed += 1
         elif result.status == OperationStatus.SKIPPED:
             self.skipped += 1
-    
+
     @property
     def success_rate(self) -> float:
         """Calculate success rate percentage."""
         if self.total == 0:
             return 0.0
-        return (self.successful / self.total) * 100
+        # Include both created and updated as successful operations
+        return ((self.successful + self.updated) / self.total) * 100

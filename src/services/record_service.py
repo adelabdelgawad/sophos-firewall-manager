@@ -16,10 +16,10 @@ from src.services.group_service import HostGroupService
 class RecordProcessingService:
     """
     Service for processing network records.
-    
+
     Orchestrates the creation of firewall entries from network records.
     """
-    
+
     def __init__(
         self,
         firewall_client: FirewallClient,
@@ -27,14 +27,60 @@ class RecordProcessingService:
     ):
         """
         Initialize service.
-        
+
         Args:
             firewall_client: Client for firewall operations
             group_service: Service for group management
         """
         self._client = firewall_client
         self._group_service = group_service
-    
+
+    def update_existing_record(self, record: NetworkRecord) -> OperationResult:
+        """
+        Update an existing record by adding it to its target group.
+
+        Args:
+            record: Network record that already exists
+
+        Returns:
+            Result of the update operation
+        """
+        if not record.is_valid:
+            return OperationResult(
+                record=record,
+                status=OperationStatus.SKIPPED,
+                status_code="000",
+                message="Invalid record format",
+            )
+
+        try:
+            group = self._group_service.get_group_for_record_type(record.record_type)
+        except ValueError as e:
+            return OperationResult(
+                record=record,
+                status=OperationStatus.FAILED,
+                status_code="000",
+                message=str(e),
+            )
+
+        # Add to appropriate group based on record type
+        success = self._add_to_group(record, group)
+
+        if success:
+            return OperationResult(
+                record=record,
+                status=OperationStatus.UPDATED,
+                status_code="200",
+                message=f"Added to group {group}",
+            )
+        else:
+            return OperationResult(
+                record=record,
+                status=OperationStatus.FAILED,
+                status_code="500",
+                message=f"Failed to add to group {group}",
+            )
+
     def process_record(self, record: NetworkRecord) -> OperationResult:
         """
         Process a single network record.
@@ -90,18 +136,27 @@ class RecordProcessingService:
         
         return result
     
-    def _add_to_group(self, record: NetworkRecord, group: str) -> None:
+    def _add_to_group(self, record: NetworkRecord, group: str) -> bool:
         """
-        Add a host to its group after creation.
-        
+        Add a host to its group.
+
         Args:
-            record: Network record that was created
+            record: Network record to add
             group: Group name to add to
+
+        Returns:
+            True if successful, False otherwise
         """
-        # This would require the update_group API call
-        # For now, we'll skip this as the sophosfirewall_python library
-        # may not support adding hosts to existing groups directly
-        pass
+        # Host name in Sophos is the record value
+        host_name = record.value
+
+        if record.record_type == RecordType.FQDN:
+            return self._client.add_to_fqdn_group(group, [host_name])
+
+        if record.record_type in (RecordType.IP_ADDRESS, RecordType.NETWORK_CIDR):
+            return self._client.add_to_ip_group(group, [host_name])
+
+        return False
     
     def process_batch(
         self,

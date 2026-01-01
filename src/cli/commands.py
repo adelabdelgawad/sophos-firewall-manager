@@ -23,24 +23,27 @@ from src.presentation.formatters import (
     SummaryFormatter,
 )
 from src.presentation.progress import ProgressTracker, create_progress_callback
+from src.services.cache_service import ExistingRecordsCache, GroupMembershipCache
 from src.services.group_service import GroupConfiguration, HostGroupService
 from src.services.record_service import RecordProcessingService
 
 
 class Application:
     """Main application orchestrator."""
-    
-    def __init__(self, file_path: str, base_name: str):
+
+    def __init__(self, file_path: str, base_name: str, update_mode: bool = False):
         """
         Initialize application.
-        
+
         Args:
             file_path: Path to input file
             base_name: Base name for host groups
+            update_mode: If True, add existing records to groups instead of skipping
         """
         self.file_path = file_path
         self.base_name = base_name
-        
+        self.update_mode = update_mode
+
         # Load settings
         try:
             self.app_settings, self.firewall_settings = get_settings()
@@ -82,6 +85,10 @@ class Application:
         self.result_formatter = OperationResultFormatter()
         self.summary_formatter = SummaryFormatter()
         self.group_formatter = GroupCreationFormatter()
+
+        # Caches
+        self.existing_cache = ExistingRecordsCache()
+        self.group_membership_cache = GroupMembershipCache()
     
     def run(self) -> int:
         """
@@ -107,32 +114,139 @@ class Application:
             # Step 3: Create host groups
             print(ColorFormatter.info("Creating host groups..."))
             group_results = self.group_service.create_groups()
-            
+
             for group_name, created in group_results.items():
                 print(self.group_formatter.format(group_name, created))
             print()
-            
-            # Step 4: Process records
-            print(ColorFormatter.info(f"Processing {len(records)} records..."))
-            
-            with ProgressTracker() as tracker:
-                tracker.start_task(
-                    total=len(records),
-                    description="Creating firewall entries"
-                )
-                
-                # Process with progress callback
-                def process_callback(result: OperationResult) -> None:
-                    """Callback to print result and advance progress."""
-                    print(self.result_formatter.format(result))
-                    tracker.advance()
-                
-                summary = self.record_service.process_batch(
-                    records=records,
-                    callback=process_callback
-                )
-            
-            # Step 5: Display summary
+
+            # Step 4: Fetch existing records for de-duplication
+            print(ColorFormatter.info("Checking existing records..."))
+            cache_loaded = self.existing_cache.load(self.firewall_client)
+
+            existing_records: list = []
+            new_records: list = []
+            skipped_existing = 0
+
+            if cache_loaded:
+                stats = self.existing_cache.stats
+                print(ColorFormatter.success(
+                    f"Found {stats['total']} existing records "
+                    f"(FQDNs: {stats['fqdns']}, IPs: {stats['ip_hosts']}, Networks: {stats['networks']})"
+                ))
+
+                # Separate existing and new records
+                for r in records:
+                    if r.is_valid and self.existing_cache.exists(r):
+                        existing_records.append(r)
+                    else:
+                        new_records.append(r)
+
+                if self.update_mode and existing_records:
+                    # In update mode, load group membership to check what needs updating
+                    print(ColorFormatter.info("Loading group membership..."))
+                    self.group_membership_cache.load(
+                        self.firewall_client,
+                        self.group_service.fqdn_group,
+                        self.group_service.ip_group,
+                    )
+                    gstats = self.group_membership_cache.stats
+                    print(ColorFormatter.success(
+                        f"Group has {gstats['fqdn_members']} FQDNs, {gstats['ip_members']} IPs"
+                    ))
+
+                    # Filter existing records: only update those not in the group
+                    records_to_update = [
+                        r for r in existing_records
+                        if not self.group_membership_cache.is_member(r)
+                    ]
+                    already_in_group = len(existing_records) - len(records_to_update)
+
+                    if already_in_group > 0:
+                        print(ColorFormatter.warning(
+                            f"Skipping {already_in_group} records already in group"
+                        ))
+                    if records_to_update:
+                        print(ColorFormatter.info(
+                            f"Will update {len(records_to_update)} existing records to add to group"
+                        ))
+                else:
+                    # Default mode: skip existing records
+                    records_to_update = []
+                    skipped_existing = len(existing_records)
+                    if skipped_existing > 0:
+                        print(ColorFormatter.warning(
+                            f"Skipping {skipped_existing} records that already exist"
+                        ))
+            else:
+                print(ColorFormatter.warning(
+                    "Could not fetch existing records - will attempt all creations"
+                ))
+                new_records = records
+                records_to_update = []
+
+            print()
+
+            # Step 5: Process new records
+            total_to_process = len(new_records) + len(records_to_update)
+            if total_to_process == 0:
+                msg = "All records already exist"
+                if self.update_mode:
+                    msg += " and are in the target groups"
+                print(ColorFormatter.success(f"{msg} - nothing to do!"))
+                return 0
+
+            from src.domain.entities import ProcessingSummary
+            summary = ProcessingSummary()
+
+            # Process new records (create)
+            if new_records:
+                valid_new = [r for r in new_records if r.is_valid]
+                invalid_new = [r for r in new_records if not r.is_valid]
+                print(ColorFormatter.info(f"Creating {len(valid_new)} new records..."))
+
+                with ProgressTracker() as tracker:
+                    tracker.start_task(
+                        total=len(new_records),
+                        description="Creating firewall entries"
+                    )
+
+                    def create_callback(result: OperationResult) -> None:
+                        print(self.result_formatter.format(result))
+                        tracker.advance()
+
+                    batch_summary = self.record_service.process_batch(
+                        records=new_records,
+                        callback=create_callback
+                    )
+                    summary.total += batch_summary.total
+                    summary.successful += batch_summary.successful
+                    summary.already_exists += batch_summary.already_exists
+                    summary.failed += batch_summary.failed
+                    summary.skipped += batch_summary.skipped
+
+            # Process existing records (update group membership)
+            if records_to_update:
+                print(ColorFormatter.info(
+                    f"Updating {len(records_to_update)} existing records..."
+                ))
+
+                with ProgressTracker() as tracker:
+                    tracker.start_task(
+                        total=len(records_to_update),
+                        description="Updating group membership"
+                    )
+
+                    for record in records_to_update:
+                        result = self.record_service.update_existing_record(record)
+                        summary.record_result(result)
+                        print(self.result_formatter.format(result))
+                        tracker.advance()
+
+            # Add skipped existing records to summary
+            summary.already_exists += skipped_existing
+            summary.total += skipped_existing
+
+            # Step 6: Display summary
             print(self.summary_formatter.format(summary))
             
             return 0
@@ -204,11 +318,17 @@ Environment Variables:
     )
     
     parser.add_argument(
+        "-u", "--update",
+        action="store_true",
+        help="Add existing records to target groups (default: skip existing)"
+    )
+
+    parser.add_argument(
         "-v", "--verbose",
         action="store_true",
         help="Enable verbose output"
     )
-    
+
     parser.add_argument(
         "--version",
         action="version",
@@ -225,7 +345,8 @@ Environment Variables:
     # Run application
     app = Application(
         file_path=args.file,
-        base_name=args.name
+        base_name=args.name,
+        update_mode=args.update
     )
     
     exit_code = app.run()

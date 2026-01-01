@@ -1,0 +1,14 @@
+*.lync.com
+*.teams.cloud.microsoft
+*.teams.microsoft.com
+teams.cloud.microsoft
+teams.microsoft.com
+*.keydelivery.mediaservices.windows.net
+*.streaming.mediaservices.windows.net
+aka.ms
+adl.windows.com
+join.secure.skypeassets.com
+mlccdnprod.azureedge.net
+*.skype.com
+52.112.0.0/14
+52.122.0.0/15
