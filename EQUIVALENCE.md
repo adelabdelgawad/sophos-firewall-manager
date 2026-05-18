@@ -7,7 +7,7 @@ by a differential harness in [`equivalence/`](equivalence/).
 ## Running the harness
 
 ```bash
-.venv/Scripts/python.exe equivalence/compare.py
+src/python-app/.venv/Scripts/python.exe equivalence/compare.py
 ```
 
 The harness:

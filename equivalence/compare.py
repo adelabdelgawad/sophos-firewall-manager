@@ -14,7 +14,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CASES_PATH = os.path.join(ROOT, "equivalence", "cases.json")
 PY_ORACLE = os.path.join(ROOT, "equivalence", "py_oracle.py")
-VENV_PYTHON = os.path.join(ROOT, ".venv", "Scripts", "python.exe")
+VENV_PYTHON = os.path.join(ROOT, "src", "python-app", ".venv", "Scripts", "python.exe")
 RUST_MANIFEST = os.path.join(ROOT, "src", "rust-app", "Cargo.toml")
 RUST_ORACLE = os.path.join(ROOT, "src", "rust-app", "target", "debug", "oracle.exe")
 

@@ -79,7 +79,7 @@ The Python and Rust cores are not just "similar" — every pure-logic surface is
 checked input-for-input by the harness in [`equivalence/`](equivalence):
 
 ```bash
-.venv/Scripts/python.exe equivalence/compare.py
+src/python-app/.venv/Scripts/python.exe equivalence/compare.py
 ```
 
 **Current status: 233 / 233 cases identical across 19 categories.** See
