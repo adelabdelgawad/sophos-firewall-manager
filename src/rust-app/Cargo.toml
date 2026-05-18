@@ -1,0 +1,29 @@
+[package]
+name = "sophos-firewall-manager"
+version = "2.0.0"
+edition = "2021"
+description = "Bulk manage Sophos Firewall host groups from network records"
+
+[[bin]]
+name = "sophos-firewall-manager"
+path = "src/main.rs"
+
+[[bin]]
+name = "oracle"
+path = "src/bin/oracle.rs"
+
+[lib]
+name = "sfm"
+path = "src/lib.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+reqwest = { version = "0.12", features = ["blocking", "default-tls"], default-features = false }
+quick-xml = "0.36"
+ipnet = "2"
+dotenvy = "0.15"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = 2

@@ -4,9 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Sophos Firewall Manager is a Python 3.12+ CLI tool for bulk managing Sophos Firewall host groups from network records. It follows Clean Architecture principles with strict type safety and uses Pydantic for validation.
+Sophos Firewall Manager is a monorepo with three interchangeable front-ends over one behavior, plus a differential test harness:
+
+- `src/python-app/` — Python 3.12+ CLI, the original implementation
+- `src/rust-app/` — Rust port of the CLI, verified byte-identical
+- `src/desktop-app/` — Tauri + SolidJS desktop UI over the Rust core
+- `equivalence/` — harness proving the Python and Rust cores agree (see `EQUIVALENCE.md`)
+
+The Python app follows Clean Architecture principles with strict type safety and uses Pydantic for validation. Unless noted otherwise, the sections below describe `src/python-app/`.
 
 ## Essential Commands
+
+All Python commands below are run from `src/python-app/`.
 
 ```bash
 # Run the application
@@ -45,7 +54,7 @@ Clean Architecture with four layers:
 
 ## Configuration
 
-Required `.env` file:
+Required `.env` file in `src/python-app/`:
 
 ```bash
 FIREWALL_HOSTNAME=firewall.example.com
@@ -55,7 +64,7 @@ FIREWALL_PORT=4444
 FIREWALL_VERIFY_SSL=false
 ```
 
-Settings use Pydantic `BaseSettings` with `FIREWALL_` prefix, cached via `get_settings()` in `config/settings.py`.
+Settings use Pydantic `BaseSettings` with `FIREWALL_` prefix, cached via `get_settings()` in `src/python-app/config/settings.py`.
 
 ## Code Style
 

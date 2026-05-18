@@ -57,3 +57,14 @@ dmypy.json
 
 # Poetry
 poetry.lock
+
+# Rust
+target/
+**/target/
+
+# Node / Tauri desktop app
+node_modules/
+**/node_modules/
+
+# Equivalence harness output
+equivalence/cases.json
